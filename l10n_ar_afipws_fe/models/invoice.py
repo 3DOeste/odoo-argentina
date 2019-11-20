@@ -115,6 +115,12 @@ class AccountInvoice(models.Model):
         'Validation Type',
         compute='_compute_validation_type',
     )
+    afip_fce_es_anulacion = fields.Boolean(
+        string='FCE: Es anulacion?',
+        help='Solo utilizado en comprobantes MiPyMEs (FCE) del tipo débito o crédito. Debe informar:\n'
+        '- SI: sí el comprobante asociado (original) se encuentra rechazado por el comprador\n'
+        '- NO: sí el comprobante asociado (original) NO se encuentra rechazado por el comprador'
+    )
 
     @api.depends('journal_id', 'afip_auth_code')
     def _compute_validation_type(self):
@@ -534,7 +540,7 @@ print "Observaciones:", wscdc.Obs
             elif afip_ws == 'wsfex':
                 # # foreign trade data: export permit, country code, etc.:
                 if inv.incoterm_id:
-                    incoterms = inv.incoterm_id.afip_code
+                    incoterms = inv.incoterm_id.code
                     incoterms_ds = inv.incoterm_id.name
                     # máximo de 20 caracteres admite
                     incoterms_ds = incoterms_ds and incoterms_ds[:20]
@@ -555,6 +561,13 @@ print "Observaciones:", wscdc.Obs
                     obs_comerciales = inv.payment_term_id.name
                 else:
                     forma_pago = obs_comerciales = None
+
+                # 1671 Report fecha_pago with format YYYMMDD
+                # 1672 Is required only doc_type 19. concept (2,4)
+                # 1673 If doc_type != 19 should not be reported.
+                # 1674 doc_type 19 concept (2,4). date should be >= invoice date
+                fecha_pago = datetime.strftime(inv.date_due, '%Y%m%d') \
+                    if int(doc_afip_code) == 19 and tipo_expo in [2, 4] and inv.date_due else ''
 
                 idioma_cbte = 1     # invoice language: spanish / español
 
@@ -591,7 +604,7 @@ print "Observaciones:", wscdc.Obs
                     nombre_cliente, cuit_pais_cliente, domicilio_cliente,
                     id_impositivo, moneda_id, moneda_ctz, obs_comerciales,
                     obs_generales, forma_pago, incoterms,
-                    idioma_cbte, incoterms_ds
+                    idioma_cbte, incoterms_ds, fecha_pago,
                 )
             elif afip_ws == 'wsbfe':
                 zona = 1  # Nacional (la unica devuelta por afip)
@@ -629,11 +642,7 @@ print "Observaciones:", wscdc.Obs
                         opcional_id=2101,
                         valor=inv.partner_bank_id.cbu)
                 elif int(doc_afip_code) in [202, 203, 207, 208, 212, 213]:
-                    # si es una NC y si el valor es el mismo al comprobante original entonces es una anulacion
-                    if int(doc_afip_code) in [203, 208, 213] and CbteAsoc.amount_total == self.amount_total:
-                        valor = 'S'
-                    else:
-                        valor = 'N'
+                    valor = inv.afip_fce_es_anulacion and 'S' or 'N'
                     ws.AgregarOpcional(
                         opcional_id=22,
                         valor=valor)

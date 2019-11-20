@@ -35,6 +35,7 @@ class AccountInvoice(models.Model):
         related='partner_id.state_id',
         store=True,
         auto_join=True,
+        compute_sudo=True,
     )
     # IMPORANTE: si llegamos a implementar el campo computado no usar
     # cotizacion de la moneda ya que esta puede cambiar y ademas, si facturamos
@@ -240,7 +241,7 @@ class AccountInvoice(models.Model):
         # comprobantes de compra
 
         # decidimos obtener esto solamente para comprobantes con doc number
-        for rec in self:
+        for rec in self.filtered(lambda x: x.company_id.localization == 'argentina'):
             str_number = rec.document_number or False
             if str_number:
                 if rec.document_type_id.code in ['33', '99', '331', '332']:
